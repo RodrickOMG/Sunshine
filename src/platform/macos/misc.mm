@@ -17,6 +17,7 @@
 #include <ifaddrs.h>
 
 // platform includes
+#include <ApplicationServices/ApplicationServices.h>
 #include <arpa/inet.h>
 #include <dlfcn.h>
 #include <Foundation/Foundation.h>
@@ -73,6 +74,16 @@ namespace platf {
     return screen_capture_allowed;
   }
 
+  namespace macos {
+    bool report_input_permission(bool trusted) {
+      if (!trusted) {
+        BOOST_LOG(warning) << "No Accessibility permission, remote mouse and keyboard input will be ignored!"sv;
+        BOOST_LOG(warning) << "Please activate it in 'System Settings' -> 'Privacy & Security' -> 'Accessibility'"sv;
+      }
+      return trusted;
+    }
+  }  // namespace macos
+
   std::unique_ptr<deinit_t> init() {
     // This will generate a warning about CGPreflightScreenCaptureAccess and
     // CGRequestScreenCaptureAccess being unavailable before macOS 10.15, but
@@ -99,6 +110,15 @@ namespace platf {
 #pragma clang diagnostic pop
     // Record that we determined that we have the screen capture permission.
     screen_capture_allowed = true;
+
+    // Input is not required to stream, so only warn and ask for it instead of failing.
+    if (!macos::report_input_permission(AXIsProcessTrusted())) {
+      const void *keys[] = {kAXTrustedCheckOptionPrompt};
+      const void *values[] = {kCFBooleanTrue};
+      const auto options = CFDictionaryCreate(nullptr, keys, values, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+      AXIsProcessTrustedWithOptions(options);
+      CFRelease(options);
+    }
     return std::make_unique<deinit_t>();
   }
 

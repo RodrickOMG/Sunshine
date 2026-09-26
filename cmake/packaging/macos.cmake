@@ -92,52 +92,63 @@ qt6_deploy_runtime_dependencies(
         endif()
 
         # SHOULD_SIGN is set only when publish_release is true or when manually building
+        set(_identity \"${APPLE_CODESIGN_IDENTITY}\")
         if(\"\$ENV{SHOULD_SIGN}\" STREQUAL \"true\")
-          # Sign bundled frameworks and plugins before signing the app itself.
-          set(_fw_dir \"\${_app}/Contents/Frameworks\")
-          if(EXISTS \"\${_fw_dir}\")
-              # Framework bundles are top-level directories.
-              file(GLOB _framework_items
-                  LIST_DIRECTORIES true
-                  \"\${_fw_dir}/*.framework\"
-              )
-              # Recursively collect only library files.
-              file(GLOB_RECURSE _sign_items
-                  \"\${_fw_dir}/*.dylib\"
-                  \"\${_app}/Contents/PlugIns/*.dylib\"
-              )
-              list(APPEND _sign_items \${_framework_items})
-
-              foreach(item IN LISTS _sign_items)
-                  execute_process(COMMAND /usr/bin/codesign --verbose=2
-                      --sign \"${APPLE_CODESIGN_IDENTITY}\" \"\${item}\"
-                      --force --timestamp --options=runtime
-                      RESULT_VARIABLE rc2
-                  )
-                  if(NOT rc2 EQUAL 0)
-                      message(FATAL_ERROR \"codesign failed while signing library: \${item}\")
-                  endif()
-              endforeach()
+          set(_sign_options --timestamp --options=runtime)
+        else()
+          # Apple Silicon refuses to run an unsigned bundle, so local installs are always signed:
+          # ad hoc by default, or with a stable identity so macOS keeps privacy permissions
+          # (Screen Recording, Accessibility) across reinstalls.
+          if(_identity STREQUAL \"\")
+            set(_identity \"-\")
           endif()
+          set(_sign_options \"\")
+        endif()
 
-          # Sign the app last
-          execute_process(COMMAND /usr/bin/codesign --verbose=2
-              --sign \"${APPLE_CODESIGN_IDENTITY}\" \"\${_app}\"
-              --entitlements \"${APPLE_ENTITLEMENTS_FILE}\"
-              --force --timestamp --options=runtime
-              RESULT_VARIABLE rc3
-          )
-          if(NOT rc3 EQUAL 0)
-              message(FATAL_ERROR \"codesign failed while signing .app\")
-          endif()
+        # Sign bundled frameworks and plugins before signing the app itself.
+        set(_fw_dir \"\${_app}/Contents/Frameworks\")
+        if(EXISTS \"\${_fw_dir}\")
+            # Framework bundles are top-level directories.
+            file(GLOB _framework_items
+                LIST_DIRECTORIES true
+                \"\${_fw_dir}/*.framework\"
+            )
+            # Recursively collect only library files.
+            file(GLOB_RECURSE _sign_items
+                \"\${_fw_dir}/*.dylib\"
+                \"\${_app}/Contents/PlugIns/*.dylib\"
+            )
+            list(APPEND _sign_items \${_framework_items})
 
-          # Verify
-          execute_process(COMMAND /usr/bin/codesign --verify --deep --strict --verbose=2 \"\${_app}\"
-              RESULT_VARIABLE rc4
-          )
-          if(NOT rc4 EQUAL 0)
-              message(FATAL_ERROR \"codesign --verify failed\")
-          endif()
+            foreach(item IN LISTS _sign_items)
+                execute_process(COMMAND /usr/bin/codesign --verbose=2
+                    --sign \"\${_identity}\" \"\${item}\"
+                    --force \${_sign_options}
+                    RESULT_VARIABLE rc2
+                )
+                if(NOT rc2 EQUAL 0)
+                    message(FATAL_ERROR \"codesign failed while signing library: \${item}\")
+                endif()
+            endforeach()
+        endif()
+
+        # Sign the app last
+        execute_process(COMMAND /usr/bin/codesign --verbose=2
+            --sign \"\${_identity}\" \"\${_app}\"
+            --entitlements \"${APPLE_ENTITLEMENTS_FILE}\"
+            --force \${_sign_options}
+            RESULT_VARIABLE rc3
+        )
+        if(NOT rc3 EQUAL 0)
+            message(FATAL_ERROR \"codesign failed while signing .app\")
+        endif()
+
+        # Verify
+        execute_process(COMMAND /usr/bin/codesign --verify --deep --strict --verbose=2 \"\${_app}\"
+            RESULT_VARIABLE rc4
+        )
+        if(NOT rc4 EQUAL 0)
+            message(FATAL_ERROR \"codesign --verify failed\")
         endif()
     " COMPONENT Runtime)
 

@@ -17,6 +17,19 @@ namespace platf {
    * @return True when Sunshine can capture the screen.
    */
   bool is_screen_capture_allowed();
+
+  namespace macos {
+    /**
+     * @brief Log a warning when macOS will discard the input events Sunshine posts.
+     *
+     * Without Accessibility permission, CoreGraphics drops posted mouse and keyboard events
+     * without reporting an error, so streaming works while remote input silently does nothing.
+     *
+     * @param trusted Whether the process has Accessibility permission.
+     * @return The value of `trusted`.
+     */
+    bool report_input_permission(bool trusted);
+  }  // namespace macos
 }  // namespace platf
 
 namespace dyn {
