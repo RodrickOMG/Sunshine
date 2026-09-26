@@ -281,6 +281,23 @@ ninja -C build
   }}
 }
 
+#### macOS code signing
+Installing the `.app` always signs the bundle, since Apple Silicon refuses to run unsigned code.
+Without an identity, the bundle is signed ad hoc. macOS ties the Screen Recording and Accessibility permissions
+to the signature, so an ad hoc signed bundle loses them each time it is rebuilt.
+
+To keep the permissions across rebuilds, create a code signing certificate in Keychain Access
+(*Keychain Access* -> *Certificate Assistant* -> *Create a Certificate...*, with *Certificate Type* set to
+*Code Signing*) and configure the build with its name.
+
+```bash
+cmake -B build -G Ninja -S . -DAPPLE_CODESIGN_IDENTITY="Sunshine Local"
+```
+
+> [!NOTE]
+> Without Accessibility permission, macOS silently discards the mouse and keyboard input sent by clients.
+> Sunshine logs a warning at startup when the permission is missing.
+
 ### Remote Build
 It may be beneficial to build remotely in some cases. This will enable easier building on different operating systems.
 
